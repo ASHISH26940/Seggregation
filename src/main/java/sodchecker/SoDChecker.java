@@ -5,6 +5,7 @@ import models.EmployeeGraph;
 import utils.ExcelReader;
 import utils.OutputGenerator;
 import java.util.*;
+import java.util.concurrent.*;
 
 public class SoDChecker {
     public static void main(String[] args) {
@@ -18,41 +19,93 @@ public class SoDChecker {
         String roleToRolePath = "src/data/roleToRole.xlsx";
         String privilegeMasterPath = "src/data/pvlgsMaster.xlsx";
 
-        // Read data from Excel files using ExcelReader
-        System.out.println("Reading Excel files...");
-        List<String[]> userDetails = ExcelReader.readExcelFile(userDetailsPath);
-        List<String[]> userRoleMapping = ExcelReader.readExcelFile(userRoleMappingPath);
-        List<String[]> roleMasterDetails = ExcelReader.readExcelFile(roleMasterDetailsPath);
-        List<String[]> roleToRole = ExcelReader.readExcelFile(roleToRolePath);
-        List<String[]> privilegeMaster = ExcelReader.readExcelFile(privilegeMasterPath);
-        
-        // Log data counts
-        System.out.println("Data loaded - Users: " + userDetails.size() + 
-                           ", User-Role mappings: " + userRoleMapping.size() + 
-                           ", Roles: " + roleMasterDetails.size() + 
-                           ", Role hierarchies: " + roleToRole.size() + 
-                           ", Privileges: " + privilegeMaster.size());
+        // Create an executor service with 4 threads
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        List<Future<List<String[]>>> futures = new ArrayList<>();
 
-        // Build the employee-role graph
-        buildEmployeeRoleGraph(graph, userDetails, userRoleMapping, roleMasterDetails);
-        
-        // Build the role hierarchy
-        buildRoleHierarchy(graph, roleToRole, roleMasterDetails);
-        
-        // Build the role-privilege relationships
-        buildRolePrivilegeRelationships(graph, privilegeMaster, roleMasterDetails);
+        // Read data from Excel files using ExcelReader in parallel
+        System.out.println("Reading Excel files in parallel...");
+        futures.add(executor.submit(() -> ExcelReader.readExcelFile(userDetailsPath)));
+        futures.add(executor.submit(() -> ExcelReader.readExcelFile(userRoleMappingPath)));
+        futures.add(executor.submit(() -> ExcelReader.readExcelFile(roleMasterDetailsPath)));
+        futures.add(executor.submit(() -> ExcelReader.readExcelFile(roleToRolePath)));
+        futures.add(executor.submit(() -> ExcelReader.readExcelFile(privilegeMasterPath)));
 
-        // Initialize the SoD violation detector as a separate component
-        SoDViolationDetector detector = new SoDViolationDetector(graph);
-        
-        // Run the violation detection
-        System.out.println("Detecting SoD violations...");
-        List<String> violations = detector.detectConflicts();
+        try {
+            // Get the results from all futures
+            List<String[]> userDetails = futures.get(0).get();
+            List<String[]> userRoleMapping = futures.get(1).get();
+            List<String[]> roleMasterDetails = futures.get(2).get();
+            List<String[]> roleToRole = futures.get(3).get();
+            List<String[]> privilegeMaster = futures.get(4).get();
+            
+            // Log data counts
+            System.out.println("Data loaded - Users: " + userDetails.size() + 
+                               ", User-Role mappings: " + userRoleMapping.size() + 
+                               ", Roles: " + roleMasterDetails.size() + 
+                               ", Role hierarchies: " + roleToRole.size() + 
+                               ", Privileges: " + privilegeMaster.size());
 
-        // Output the results
-        System.out.println("Found " + violations.size() + " potential SoD violations");
-        OutputGenerator.generateCSV(violations, "output.csv");
-        System.out.println("Results saved to output.csv");
+            // Process the data in parallel using CountDownLatch to wait for all tasks to complete
+            CountDownLatch latch = new CountDownLatch(3);
+            
+            // Build the employee-role graph in a thread
+            executor.submit(() -> {
+                try {
+                    buildEmployeeRoleGraph(graph, userDetails, userRoleMapping, roleMasterDetails);
+                } finally {
+                    latch.countDown();
+                }
+            });
+            
+            // Build the role hierarchy in a thread
+            executor.submit(() -> {
+                try {
+                    buildRoleHierarchy(graph, roleToRole, roleMasterDetails);
+                } finally {
+                    latch.countDown();
+                }
+            });
+            
+            // Build the role-privilege relationships in a thread
+            executor.submit(() -> {
+                try {
+                    buildRolePrivilegeRelationships(graph, privilegeMaster, roleMasterDetails);
+                } finally {
+                    latch.countDown();
+                }
+            });
+            
+            // Wait for all three processing tasks to complete
+            latch.await();
+            
+            // Initialize the SoD violation detector as a separate component
+            SoDViolationDetector detector = new SoDViolationDetector(graph);
+            
+            // Run the violation detection
+            System.out.println("Detecting SoD violations...");
+            List<String> violations = detector.detectConflicts();
+
+            // Output the results
+            System.out.println("Found " + violations.size() + " potential SoD violations");
+            OutputGenerator.generateCSV(violations, "output.csv");
+            System.out.println("Results saved to output.csv");
+            
+        } catch (InterruptedException | ExecutionException e) {
+            System.err.println("Error in parallel processing: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            // Shutdown the executor service
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
     }
     
     private static void buildEmployeeRoleGraph(EmployeeGraph graph, 
@@ -70,22 +123,75 @@ public class SoDChecker {
         if (!userRoleMappingData.isEmpty()) userRoleMappingData.remove(0);
         if (!roleMasterData.isEmpty()) roleMasterData.remove(0);
         
-        for (String[] entry : userRoleMappingData) {
-            if (entry.length < 3) {
-                System.out.println("⚠ Skipping incomplete user-role mapping record");
-                continue;
+        // Create a thread-safe map to store user names and role names for parallel lookup
+        ConcurrentMap<String, String> userIdToNameMap = new ConcurrentHashMap<>();
+        ConcurrentMap<String, String> roleIdToNameMap = new ConcurrentHashMap<>();
+        
+        // Precompute maps for faster lookups
+        for (String[] user : userDetailsData) {
+            if (user.length > 5) {
+                userIdToNameMap.put(user[5], user[2]); // Map USER_ID to USER_DISPLAY_NAME
             }
-            
-            String roleID = entry[0]; // ROLE_ID
-            String userID = entry[2]; // USER_ID
-
-            String employeeName = getUserNameByID(userDetailsData, userID);
-            String roleName = getRoleNameByID(roleMasterData, roleID);
-
-            if (employeeName != null && roleName != null) {
-                graph.addRole(employeeName, roleName);
-                System.out.println("Added role mapping: " + employeeName + " -> " + roleName);
+        }
+        
+        for (String[] role : roleMasterData) {
+            if (role.length > 1) {
+                roleIdToNameMap.put(role[0], role[1]); // Map ROLE_ID to ROLE_NAME
             }
+        }
+        
+        // Process user-role mappings in parallel chunks
+        int chunkSize = Math.max(1, userRoleMappingData.size() / 4);
+        List<List<String[]>> chunks = new ArrayList<>();
+        
+        for (int i = 0; i < userRoleMappingData.size(); i += chunkSize) {
+            int end = Math.min(i + chunkSize, userRoleMappingData.size());
+            chunks.add(userRoleMappingData.subList(i, end));
+        }
+        
+        // Process each chunk in parallel
+        CountDownLatch chunkLatch = new CountDownLatch(chunks.size());
+        for (List<String[]> chunk : chunks) {
+            Thread t = new Thread(() -> {
+                try {
+                    for (String[] entry : chunk) {
+                        if (entry.length < 3) {
+                            System.out.println("⚠ Skipping incomplete user-role mapping record");
+                            continue;
+                        }
+                        
+                        String roleID = entry[0]; // ROLE_ID
+                        String userID = entry[2]; // USER_ID
+                        
+                        String employeeName = userIdToNameMap.get(userID);
+                        String roleName = roleIdToNameMap.get(roleID);
+                        
+                        if (employeeName != null && roleName != null) {
+                            synchronized (graph) {
+                                graph.addRole(employeeName, roleName);
+                            }
+                            System.out.println("Added role mapping: " + employeeName + " -> " + roleName);
+                        } else {
+                            if (employeeName == null) {
+                                System.out.println("⚠ UserID not found: " + userID);
+                            }
+                            if (roleName == null) {
+                                System.out.println("⚠ RoleID not found: " + roleID);
+                            }
+                        }
+                    }
+                } finally {
+                    chunkLatch.countDown();
+                }
+            });
+            t.start();
+        }
+        
+        try {
+            chunkLatch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.err.println("Thread interrupted while building employee-role graph: " + e.getMessage());
         }
     }
     
@@ -101,22 +207,66 @@ public class SoDChecker {
         if (!roleToRoleData.isEmpty()) roleToRoleData.remove(0);
         if (!roleMasterData.isEmpty()) roleMasterData.remove(0);
         
-        for (String[] entry : roleToRoleData) {
-            if (entry.length < 3) {
-                System.out.println("⚠ Skipping incomplete role hierarchy record");
-                continue;
+        // Create a thread-safe map for role name lookups
+        Map<String, String> roleIdToNameMap = new ConcurrentHashMap<>();
+        for (String[] role : roleMasterData) {
+            if (role.length > 1) {
+                roleIdToNameMap.put(role[0], role[1]); // Map ROLE_ID to ROLE_NAME
             }
-            
-            String childRoleID = entry[1]; // CHILD_ROLE_ID
-            String parentRoleID = entry[2]; // PARENT_ROLE_ID
-
-            String childRole = getRoleNameByID(roleMasterData, childRoleID);
-            String parentRole = getRoleNameByID(roleMasterData, parentRoleID);
-
-            if (childRole != null && parentRole != null) {
-                graph.addHierarchy(childRole, "Parent_" + parentRole);
-                System.out.println("Added hierarchy: " + childRole + " -> Parent_" + parentRole);
-            }
+        }
+        
+        // Process role hierarchies in parallel chunks
+        int chunkSize = Math.max(1, roleToRoleData.size() / 4);
+        List<List<String[]>> chunks = new ArrayList<>();
+        
+        for (int i = 0; i < roleToRoleData.size(); i += chunkSize) {
+            int end = Math.min(i + chunkSize, roleToRoleData.size());
+            chunks.add(roleToRoleData.subList(i, end));
+        }
+        
+        // Process each chunk in parallel
+        CountDownLatch chunkLatch = new CountDownLatch(chunks.size());
+        for (List<String[]> chunk : chunks) {
+            Thread t = new Thread(() -> {
+                try {
+                    for (String[] entry : chunk) {
+                        if (entry.length < 3) {
+                            System.out.println("⚠ Skipping incomplete role hierarchy record");
+                            continue;
+                        }
+                        
+                        String childRoleID = entry[1]; // CHILD_ROLE_ID
+                        String parentRoleID = entry[2]; // PARENT_ROLE_ID
+                        
+                        String childRole = roleIdToNameMap.get(childRoleID);
+                        String parentRole = roleIdToNameMap.get(parentRoleID);
+                        
+                        if (childRole != null && parentRole != null) {
+                            synchronized (graph) {
+                                graph.addHierarchy(childRole, "Parent_" + parentRole);
+                            }
+                            System.out.println("Added hierarchy: " + childRole + " -> Parent_" + parentRole);
+                        } else {
+                            if (childRole == null) {
+                                System.out.println("⚠ Child RoleID not found: " + childRoleID);
+                            }
+                            if (parentRole == null) {
+                                System.out.println("⚠ Parent RoleID not found: " + parentRoleID);
+                            }
+                        }
+                    }
+                } finally {
+                    chunkLatch.countDown();
+                }
+            });
+            t.start();
+        }
+        
+        try {
+            chunkLatch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.err.println("Thread interrupted while building role hierarchy: " + e.getMessage());
         }
     }
     
@@ -132,46 +282,58 @@ public class SoDChecker {
         if (!privilegeData.isEmpty()) privilegeData.remove(0);
         if (!roleMasterData.isEmpty()) roleMasterData.remove(0);
         
-        for (String[] entry : privilegeData) {
-            if (entry.length < 2) {
-                System.out.println("⚠ Skipping incomplete privilege record");
-                continue;
-            }
-            
-            String privilegeName = entry[1]; // NAME field
-            
-            // For simplicity, we'll just link privileges to roles based on name matching
-            // In a real implementation, you'd use the proper relationship tables
-            for (String[] role : roleMasterData) {
-                if (role.length < 2) continue;
-                
-                String roleName = role[1]; // ROLE_NAME
-                if (roleName != null && 
-                    (roleName.contains(privilegeName) || privilegeName.contains(roleName))) {
-                    graph.addRole(roleName, "Privilege_" + privilegeName);
-                    System.out.println("Added privilege mapping: " + roleName + " -> Privilege_" + privilegeName);
+        // Process privileges in parallel chunks
+        int chunkSize = Math.max(1, privilegeData.size() / 4);
+        List<List<String[]>> chunks = new ArrayList<>();
+        
+        for (int i = 0; i < privilegeData.size(); i += chunkSize) {
+            int end = Math.min(i + chunkSize, privilegeData.size());
+            chunks.add(privilegeData.subList(i, end));
+        }
+        
+        // Create a thread-safe copy of role data
+        final List<String[]> roleMasterDataFinal = new ArrayList<>(roleMasterData);
+        
+        // Process each chunk in parallel
+        CountDownLatch chunkLatch = new CountDownLatch(chunks.size());
+        for (List<String[]> chunk : chunks) {
+            Thread t = new Thread(() -> {
+                try {
+                    for (String[] entry : chunk) {
+                        if (entry.length < 2) {
+                            System.out.println("⚠ Skipping incomplete privilege record");
+                            continue;
+                        }
+                        
+                        String privilegeName = entry[1]; // NAME field
+                        
+                        // For simplicity, we'll just link privileges to roles based on name matching
+                        // In a real implementation, you'd use the proper relationship tables
+                        for (String[] role : roleMasterDataFinal) {
+                            if (role.length < 2) continue;
+                            
+                            String roleName = role[1]; // ROLE_NAME
+                            if (roleName != null && 
+                                (roleName.contains(privilegeName) || privilegeName.contains(roleName))) {
+                                synchronized (graph) {
+                                    graph.addRole(roleName, "Privilege_" + privilegeName);
+                                }
+                                System.out.println("Added privilege mapping: " + roleName + " -> Privilege_" + privilegeName);
+                            }
+                        }
+                    }
+                } finally {
+                    chunkLatch.countDown();
                 }
-            }
+            });
+            t.start();
         }
-    }
-
-    private static String getUserNameByID(List<String[]> users, String userID) {
-        for (String[] user : users) {
-            if (user.length > 5 && user[5].equals(userID)) { // USER_ID is at index 5
-                return user[2]; // USER_DISPLAY_NAME is at index 2
-            }
+        
+        try {
+            chunkLatch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.err.println("Thread interrupted while building role-privilege relationships: " + e.getMessage());
         }
-        System.out.println("⚠ UserID not found: " + userID);
-        return null;
-    }
-    
-    private static String getRoleNameByID(List<String[]> roles, String roleID) {
-        for (String[] role : roles) {
-            if (role.length > 1 && role[0].equals(roleID)) { // ROLE_ID is at index 0
-                return role[1]; // ROLE_NAME is at index 1
-            }
-        }
-        System.out.println("⚠ RoleID not found: " + roleID);
-        return null;
     }
 }
