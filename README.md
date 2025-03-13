@@ -123,12 +123,18 @@ docker --version
 🛠️ Step 1: Clone the Repository and Install Dependencies
 Clone the repository:
 ```
-git clone <repository_url>
+git clone https://github.com/ASHISH26940/Seggregation.git
 ```
-cd myproject
+cd to the project
 Install dependencies and package the project:
 ```
 mvn clean install
+```
+
+run it locally:
+```
+mvn exec:java -Dexec.mainClass="sodchecker.SoDChecker"
+
 ```
 ---
 
