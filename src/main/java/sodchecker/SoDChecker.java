@@ -13,12 +13,13 @@ public class SoDChecker {
         long startTime = System.currentTimeMillis();
         EmployeeGraph graph = new EmployeeGraph();
 
-        // Define file paths
+        //Define file paths
         // String userDetailsPath = "src/data/userDetails.xlsx";
         // String userRoleMappingPath = "src/data/userRoleMapping.xlsx";
         // String roleMasterDetailsPath = "src/data/roleMasterDetails.xlsx";
         // String roleToRolePath = "src/data/roleToRole.xlsx";
         // String privilegeMasterPath = "src/data/pvlgsMaster.xlsx";
+        // String outputPath="iRM_SOD_REPORTS.xlsx";
 
         if (args.length < 5) {
             System.err.println("Usage: java -jar app.jar <userDetailsPath> <userRoleMappingPath> <roleMasterDetailsPath> <roleToRolePath> <privilegeMasterPath> <outputPath>");
