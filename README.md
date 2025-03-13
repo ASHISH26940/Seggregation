@@ -120,23 +120,7 @@ docker --version
 
 ---
 
-## **Folder Structure**
 
-Ensure your project is structured as follows:
-
-```
-myproject/
-├── Dockerfile
-├── pom.xml
-├── src/
-│   ├── data/
-│   │    ├── userDetails.xlsx
-│   │    ├── userRoleMapping.xlsx
-│   │    ├── roleMasterDetails.xlsx
-│   │    ├── roleToRole.xlsx
-│   │    └── pvlgsMaster.xlsx
-└──(The generated report will be stored here)
-```
 
 ---
 
