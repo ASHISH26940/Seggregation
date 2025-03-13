@@ -1,7 +1,3 @@
-Here's an updated **README.md** that includes detailed steps to install Docker (on **Fedora** and **Windows**) while configuring **5GB of memory** and maximizing the **swap size** for better performance.
-
----
-
 # 🚀 SoD Violation Detector
 
 This project identifies **Segregation of Duties (SoD) violations** by analyzing user roles and privileges from Excel files. It outputs a detailed violation report in **Excel format**.
