@@ -1,181 +1,298 @@
-# SoDChecker
+Here's an updated **README.md** that includes detailed steps to install Docker (on **Fedora** and **Windows**) while configuring **5GB of memory** and maximizing the **swap size** for better performance.
 
-## Overview
-SoDChecker (Segregation of Duties Checker) is a robust Java-based compliance tool designed to identify and report potential conflicts in role-based access control systems. This tool is particularly useful for Oracle Fusion environments where complex role hierarchies and access entitlements require careful monitoring to maintain proper segregation of duties.
+---
 
-The application analyzes relationships between users, roles, privileges, and entitlements to detect instances where a single user might have access to conflicting functions, which could pose security or compliance risks.
+# 🚀 SoD Violation Detector
 
-## Key Features
+This project identifies **Segregation of Duties (SoD) violations** by analyzing user roles and privileges from Excel files. It outputs a detailed violation report in **Excel format**.
 
-* **Comprehensive Data Processing**: Reads user, role, privilege, and hierarchy data from Excel files
-* **Advanced Graph Construction**: Builds an integrated Employee-Role and Role-Hierarchy graph
-* **Intelligent Conflict Detection**: Identifies SoD violations based on role combinations and hierarchical relationships
-* **Customizable Analysis**: Configurable to detect various types of conflicts
-* **Detailed Reporting**: Outputs comprehensive violation reports to CSV format for further analysis
+---
 
-## Prerequisites
+## 📋 Prerequisites
 
-* Java 11 or later
-* Apache Maven 3.6+ (for dependency management)
-* Required Java libraries:
-  * Apache POI 5.0+ (for Excel file processing)
-  * Apache Commons IO 2.8+ (for file operations)
-  * SLF4J 1.7+ (for logging)
+Ensure you have the following installed:
 
-## Project Structure
+✅ **Docker** (with 5GB Memory and Maximum Swap size)  
+✅ **Maven** (for building the project)  
 
-```
-SoDChecker/
-├── src/
-│   ├── main/
-│   │   ├── java/
-│   │   │   ├── sodchecker/
-│   │   │   │   └── SoDChecker.java        # Main application class
-│   │   │   ├── detection/
-│   │   │   │   └── SoDViolationDetector.java  # Conflict detection logic
-│   │   │   ├── models/
-│   │   │   │   └── EmployeeGraph.java     # Data structure for relationships
-│   │   │   ├── utils/
-│   │   │   │   ├── ExcelReader.java       # Excel file processor
-│   │   │   │   └── OutputGenerator.java   # Report generation utility
-│   │   ├── resources/
-│   │   │   ├── data/                     # Input data directory
-│   │   │   │   ├── userDetails.xlsx      # User information
-│   │   │   │   ├── userRoleMapping.xlsx  # User-role assignments
-│   │   │   │   ├── roleMasterDetails.xlsx # Role definitions
-│   │   │   │   ├── roleToRole.xlsx       # Role hierarchy relationships
-│   │   │   │   └── pvlgsMaster.xlsx      # Privilege definitions
-│   │   │   └── log4j2.xml                # Logging configuration
-│   └── test/                             # Unit and integration tests
-├── pom.xml                               # Maven configuration
-├── README.md                             # Project documentation
-└── LICENSE                               # License information
+---
+
+# 🐳 Docker Installation & Resource Configuration
+
+---
+
+## **1. Fedora (Linux)**
+
+### Step 1: Install Docker on Fedora
+
+1. Update your system:
+
+```bash
+sudo dnf update -y
 ```
 
-## Installation
+2. Install Docker:
 
-1. Clone the repository:
-```sh
-git clone https://github.com/yourusername/SoDChecker.git
-cd SoDChecker
+```bash
+sudo dnf install docker -y
 ```
 
-2. Build the project using Maven:
-```sh
-mvn clean package
+3. Enable and start the Docker service:
+
+```bash
+sudo systemctl enable --now docker
 ```
 
-3. Run the application:
-```sh
-java -jar target/sodchecker-1.0.jar
+4. Add your user to the `docker` group to run Docker without `sudo`:
+
+```bash
+sudo usermod -aG docker $USER
+newgrp docker
 ```
 
-Alternatively, run directly with Maven:
-```sh
-mvn exec:java -Dexec.mainClass="sodchecker.SoDChecker"
+### Step 2: Increase Docker Memory and Swap Limit
+
+1. Create or update the Docker daemon configuration:
+
+```bash
+sudo mkdir -p /etc/docker
+sudo nano /etc/docker/daemon.json
 ```
 
-## Usage Guide
+2. Add the following configuration (5GB memory and max swap):
 
-### Input File Requirements
-
-1. **userDetails.xlsx**: Contains user information
-   - Required columns: `HCM_EMP_PERSON_ID`, `USER_DISPLAY_NAME`, `USER_ID` (plus others)
-
-2. **userRoleMapping.xlsx**: Maps users to their assigned roles
-   - Required columns: `ROLE_ID`, `MEMBERSHIP_ID`, `USER_ID`, effective dates
-
-3. **roleMasterDetails.xlsx**: Defines all roles in the system
-   - Required columns: `ROLE_ID`, `ROLE_NAME`, `ROLE_TYPE_CODE`
-
-4. **roleToRole.xlsx**: Defines role hierarchy relationships
-   - Required columns: `MEMBERSHIP_ID`, `CHILD_ROLE_ID`, `PARENT_ROLE_ID`
-
-5. **pvlgsMaster.xlsx**: Lists all privileges
-   - Required columns: `NAME`, `PRIVILEGE_ID`, `DESCRIPTION`
-
-### Configuration
-
-You can customize the conflict detection rules by modifying the `SoDViolationDetector` class:
-
-```java
-// Example: Configure the detector to use specific conflict rules
-SoDViolationDetector detector = new SoDViolationDetector(graph);
-detector.addConflictRule("Create", "Approve");
-detector.addConflictRule("Request", "Authorize");
-```
-
-### Running the Analysis
-
-1. Place your Excel files in the `src/main/resources/data/` directory
-2. Run the application using one of the methods above
-3. Check the console for progress and any warnings
-4. Review the generated `output.csv` file for detailed violation reports
-
-## Troubleshooting
-
-### Common Issues
-
-| Issue | Solution |
-|-------|----------|
-| Excel numeric values appearing as scientific notation | Modify `ExcelReader.java` to use `Cell.setCellType(CellType.STRING)` before reading |
-| "⚠ Skipping invalid entry" messages | Check input files for missing data or format issues |
-| OutOfMemoryError | Increase JVM heap size: `java -Xmx4g -jar target/sodchecker-1.0.jar` |
-| Missing column errors | Ensure Excel files contain all required columns with exact spelling |
-
-### Logs
-
-The application uses SLF4J for logging. Check the log file at `logs/sodchecker.log` for detailed information about the execution process.
-
-## Advanced Usage
-
-### Custom Conflict Rules
-
-You can create custom conflict detection rules by extending the `SoDViolationDetector` class:
-
-```java
-public class CustomSoDDetector extends SoDViolationDetector {
-    public CustomSoDDetector(EmployeeGraph graph) {
-        super(graph);
-        // Add your custom detection logic here
-    }
-    
-    @Override
-    public List<String> detectConflicts() {
-        // Implement your custom conflict detection algorithm
-    }
+```json
+{
+  "default-memory": "5120m",
+  "default-memory-swap": "-1"
 }
 ```
 
-### Performance Optimization
+3. Restart Docker to apply changes:
 
-For large data sets, consider:
-1. Increasing JVM heap size
-2. Using the batch processing option: `SoDChecker --batch-size=1000`
-3. Enabling parallel processing: `SoDChecker --parallel`
+```bash
+sudo systemctl restart docker
+```
 
-## Contributing
+4. Verify Docker is running:
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+```bash
+docker info | grep -i memory
+```
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### Step 3: Verify Installation
 
-## License
+Check the Docker version:
 
-This project is licensed under the MIT License - see the `LICENSE` file for details.
+```bash
+docker --version
+```
 
-## Acknowledgments
+---
 
-* Oracle Fusion documentation for SoD concepts and architecture
-* Apache POI developers for the excellent Excel processing library
-* All contributors who have helped improve this tool
+## **2. Windows (Docker Desktop)**
 
-## Contact
+### Step 1: Install Docker Desktop
 
-Project Maintainer: [Your Name](mailto:your.email@example.com)
+1. Download **Docker Desktop** from:  
+👉 [https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)  
 
-Project Repository: [https://github.com/yourusername/SoDChecker](https://github.com/yourusername/SoDChecker)
+2. Install Docker Desktop by following the installer instructions.
+
+### Step 2: Increase Docker Memory and Swap Limit
+
+1. Open Docker Desktop.  
+2. Go to **Settings** (⚙️) > **Resources**.  
+3. Adjust the following:
+
+- **Memory**: Set it to **5GB**.  
+- **Swap**: Set it to **Maximum (4GB or more)**.
+
+4. Click **Apply & Restart** to save the settings.
+
+### Step 3: Verify Installation
+
+Check if Docker is installed correctly:
+
+```powershell
+docker --version
+```
+
+---
+
+# 📂 Project Setup Instructions
+
+---
+
+## **Folder Structure**
+
+Ensure your project is structured as follows:
+
+```
+myproject/
+├── Dockerfile
+├── pom.xml
+├── src/
+│   ├── data/
+│   │    ├── userDetails.xlsx
+│   │    ├── userRoleMapping.xlsx
+│   │    ├── roleMasterDetails.xlsx
+│   │    ├── roleToRole.xlsx
+│   │    └── pvlgsMaster.xlsx
+└── output/ (The generated report will be stored here)
+```
+
+---
+
+## 🛠️ Step 1: Build the Docker Image
+
+1. Navigate to the project folder:
+
+- **Linux**:
+```bash
+cd ~/code/maventest/myproject
+```
+
+- **Windows (PowerShell)**:
+```powershell
+cd C:\path\to\your\myproject
+```
+
+2. Build the project using **Maven**:
+
+```bash
+mvn clean package
+```
+
+3. Build the Docker image:
+
+```bash
+docker build -t sod-violation-detector .
+```
+
+---
+
+## ▶️ Step 2: Run the SoD Violation Detector
+
+---
+
+### **Linux (Fedora)**:
+
+```bash
+docker run --rm \
+  -e JAVA_OPTS="-Xmx4g -Xms1g" \
+  -v ~/code/maventest/myproject/src/data:/app/data \
+  -v ~/output:/app/output \
+  sod-violation-detector \
+  /app/data/userDetails.xlsx \
+  /app/data/userRoleMapping.xlsx \
+  /app/data/roleMasterDetails.xlsx \
+  /app/data/roleToRole.xlsx \
+  /app/data/pvlgsMaster.xlsx \
+  /app/output/iRM_SOD_REPORTS.xlsx
+```
+
+---
+
+### **Windows (PowerShell)**:
+
+```powershell
+docker run --rm `
+  -e JAVA_OPTS="-Xmx4g -Xms1g" `
+  -v "C:\path\to\your\myproject\src\data:/app/data" `
+  -v "C:\path\to\your\output:/app/output" `
+  sod-violation-detector `
+  /app/data/userDetails.xlsx `
+  /app/data/userRoleMapping.xlsx `
+  /app/data/roleMasterDetails.xlsx `
+  /app/data/roleToRole.xlsx `
+  /app/data/pvlgsMaster.xlsx `
+  /app/output/iRM_SOD_REPORTS.xlsx
+```
+
+---
+
+## 📊 Step 3: View the Output
+
+The generated **iRM_SOD_REPORTS.xlsx** report will be saved to your `output` folder.
+
+### Linux:
+
+```bash
+ls ~/output/iRM_SOD_REPORTS.xlsx
+libreoffice ~/output/iRM_SOD_REPORTS.xlsx
+```
+
+### Windows (PowerShell):
+
+```powershell
+dir C:\path\to\your\output\iRM_SOD_REPORTS.xlsx
+start C:\path\to\your\output\iRM_SOD_REPORTS.xlsx
+```
+
+---
+
+## 🛑 Troubleshooting
+
+### 1. **Docker not starting?**
+- Ensure the Docker service is running:
+
+  - **Linux**:
+  ```bash
+  sudo systemctl status docker
+  ```
+  - **Windows**:  
+    Check Docker Desktop is running from the system tray.
+
+### 2. **Output not visible?**
+Ensure the output directory is correctly mapped and exists:
+
+- **Linux**:
+```bash
+mkdir -p ~/output
+```
+- **Windows** (PowerShell):
+```powershell
+mkdir C:\path\to\your\output
+```
+
+### 3. **Out of Memory Errors?**
+If you encounter **out-of-memory** errors, increase Docker’s memory allocation further:
+
+- **Linux**:  
+Edit `/etc/docker/daemon.json` and restart Docker:
+
+```bash
+sudo systemctl restart docker
+```
+
+- **Windows**:  
+Go to **Docker Desktop Settings > Resources** and increase memory beyond **5GB**.
+
+---
+
+## 🧹 Cleanup (Optional)
+
+After generating reports, you may want to remove unused Docker containers and images:
+
+```bash
+docker system prune -af
+```
+
+---
+
+## ✅ Example Output
+
+```
+Found 2566 potential SoD violations
+✅ Excel output successfully written to: /app/output/iRM_SOD_REPORTS.xlsx
+Total time taken: 34846 ms
+```
+
+---
+
+## 🎉 You're All Set!
+
+You've successfully installed Docker with 5GB of memory and maximum swap and run the **SoD Violation Detector** on **Linux (Fedora)** or **Windows**.
+
+If you encounter any issues, feel free to reach out! 🚀
