@@ -10,6 +10,7 @@ import java.util.concurrent.*;
 public class SoDChecker {
     public static void main(String[] args) {
         // Initialize the employee graph
+        long startTime = System.currentTimeMillis();
         EmployeeGraph graph = new EmployeeGraph();
 
         // Define file paths
@@ -119,6 +120,8 @@ public class SoDChecker {
                 executor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
+            long endTime = System.currentTimeMillis(); // End time tracking
+            System.out.println("Total time taken: " + (endTime - startTime) + " ms");
         }
     }
     
