@@ -135,7 +135,7 @@ myproject/
 │   │    ├── roleMasterDetails.xlsx
 │   │    ├── roleToRole.xlsx
 │   │    └── pvlgsMaster.xlsx
-└── output/ (The generated report will be stored here)
+└──(The generated report will be stored here)
 ```
 
 ---
