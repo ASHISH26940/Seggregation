@@ -1,25 +1,32 @@
-# 🏗 Stage 1: Build Application using Maven
-FROM maven:3.9.6-eclipse-temurin-17 AS builder
+# Stage 1: Build the application
+FROM maven:3.9.0-eclipse-temurin-17 AS build
 
+# Set the working directory
 WORKDIR /app
 
-# Copy the source code and pom.xml
-COPY . .
+# Copy the pom.xml to cache dependencies
+COPY pom.xml .
 
-# Build the application with dependencies (optimized with cache)
-RUN --mount=type=cache,target=/root/.m2 mvn clean package -DskipTests
+# Download dependencies without building
+RUN mvn dependency:go-offline
 
-# 🌟 Stage 2: Minimal Runtime with Eclipse Temurin JDK 17
+# Copy the entire source code
+COPY src ./src
+
+# Package the application with dependencies (shaded JAR)
+RUN mvn clean package -DskipTests
+
+# Stage 2: Create a minimal runtime image
 FROM eclipse-temurin:17-jdk
 
+# Set the working directory
 WORKDIR /app
 
-# Security best practice: Create a non-root user
-RUN useradd -m appuser
-USER appuser
+# Set Java options for increased heap size (adjust as needed)
+ENV JAVA_OPTS="-Xms512m -Xmx4g"
 
-# Copy the built JAR from the builder stage
-COPY --from=builder /app/target/myproject-1.0-SNAPSHOT.jar app.jar
+# Copy the fat JAR from the builder stage
+COPY --from=build /app/target/myproject-1.0-SNAPSHOT.jar app.jar
 
-# Set entrypoint for better container execution
+# Set the input and output as runtime arguments
 ENTRYPOINT ["java", "-jar", "app.jar"]

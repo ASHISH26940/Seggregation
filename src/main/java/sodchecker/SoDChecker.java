@@ -13,11 +13,23 @@ public class SoDChecker {
         EmployeeGraph graph = new EmployeeGraph();
 
         // Define file paths
-        String userDetailsPath = "src/data/userDetails.xlsx";
-        String userRoleMappingPath = "src/data/userRoleMapping.xlsx";
-        String roleMasterDetailsPath = "src/data/roleMasterDetails.xlsx";
-        String roleToRolePath = "src/data/roleToRole.xlsx";
-        String privilegeMasterPath = "src/data/pvlgsMaster.xlsx";
+        // String userDetailsPath = "src/data/userDetails.xlsx";
+        // String userRoleMappingPath = "src/data/userRoleMapping.xlsx";
+        // String roleMasterDetailsPath = "src/data/roleMasterDetails.xlsx";
+        // String roleToRolePath = "src/data/roleToRole.xlsx";
+        // String privilegeMasterPath = "src/data/pvlgsMaster.xlsx";
+
+        if (args.length < 5) {
+            System.err.println("Usage: java -jar app.jar <userDetailsPath> <userRoleMappingPath> <roleMasterDetailsPath> <roleToRolePath> <privilegeMasterPath> <outputPath>");
+            System.exit(1);
+        }
+
+        String userDetailsPath = args[0];
+        String userRoleMappingPath = args[1];
+        String roleMasterDetailsPath = args[2];
+        String roleToRolePath = args[3];
+        String privilegeMasterPath = args[4];
+        String outputPath = args[5];
 
         // Create an executor service with 4 threads
         ExecutorService executor = Executors.newFixedThreadPool(4);
@@ -84,11 +96,13 @@ public class SoDChecker {
             
             // Run the violation detection
             System.out.println("Detecting SoD violations...");
-            List<String> violations = detector.detectConflicts();
+            List<String[]> violations = detector.detectConflicts();
 
             // Output the results
             System.out.println("Found " + violations.size() + " potential SoD violations");
-            OutputGenerator.generateCSV(violations, "output.csv");
+            OutputGenerator.generateExcel(violations, outputPath);
+            
+            //OutputGenerator.generateExcel(violations, "output.xlsx");
             System.out.println("Results saved to output.csv");
             
         } catch (InterruptedException | ExecutionException e) {
@@ -243,7 +257,7 @@ public class SoDChecker {
                         
                         if (childRole != null && parentRole != null) {
                             synchronized (graph) {
-                                graph.addHierarchy(childRole, "Parent_" + parentRole);
+                                graph.addHierarchy(childRole, parentRole);
                             }
                             System.out.println("Added hierarchy: " + childRole + " -> Parent_" + parentRole);
                         } else {
@@ -316,7 +330,7 @@ public class SoDChecker {
                             if (roleName != null && 
                                 (roleName.contains(privilegeName) || privilegeName.contains(roleName))) {
                                 synchronized (graph) {
-                                    graph.addRole(roleName, "Privilege_" + privilegeName);
+                                    graph.addRolePrivilege(roleName, privilegeName);
                                 }
                                 System.out.println("Added privilege mapping: " + roleName + " -> Privilege_" + privilegeName);
                             }
